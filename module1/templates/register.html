@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block start %}
+<br><br>
+<div class="container">
+
+  <form class="col-6 mx-auto card p-3 shadow-lg" method="post" enctype="multipart/form-data">
+
+  <h2>Register</h2><hr>
+<!--      {% if messages %}-->
+<!--            <div class="alert alert-primary" role="alert">-->
+<!--            {% for message in messages %}-->
+<!--             {{ message }}-->
+<!--            {% endfor %}-->
+<!--   </div>-->
+<!--      <ul class="message">-->
+<!--      <li {% if message.tags %} class="{{message.tags}}"{% endif %}>{{ message }}</li>-->
+<!--      </ul>-->
+<!--      {% endif %}-->
+
+   <div class="mb-3">
+    <label for="exampleInputEmail1" class="form-label">First Name</label>
+    <input type="text" class="form-control" name="first_name" id="exampleInputEmail1" aria-describedby="emailHelp">
+  </div>
+   <div class="mb-3">
+    <label for="exampleInputEmail2" class="form-label">Last Name</label>
+    <input type="text" class="form-control" name="last_name" id="exampleInputEmail2" aria-describedby="emailHelp">
+  </div>
+  <div class="mb-3">
+    <label for="exampleInputEmail3" class="form-label">Username</label>
+    <input type="text" class="form-control" name="username" id="exampleInputEmail3" aria-describedby="emailHelp">
+  </div>
+   <div class="mb-3">
+    <label for="exampleInputEmail4" class="form-label">Email</label>
+    <input type="text" class="form-control" name="email" id="exampleInputEmail4" aria-describedby="emailHelp">
+  </div>
+  <div class="mb-3">
+    <label for="exampleInputPassword1" class="form-label">Password</label>
+    <input type="password" class="form-control" name="password" id="exampleInputPassword1">
+  </div>
+   <div class="mb-3">
+    <label for="phone" class="form-label">Mobile No.</label>
+    <input type="text" class="form-control" name="phone" id="phone">
+  </div>
+<!--  <div class="mb-3">-->
+<!--    <select name="role" id="role">-->
+<!--        <option value="Select Role">Select Role</option>-->
+<!--    <option value="User">User</option>-->
+<!--    <option value="Admin">Admin</option>-->
+<!--    </select>-->
+<!--  </div>-->
+  <input type="submit" value="Register">
+
+<p>Already have an account <a href="/login">Login</a></p>
+  </form>
+</div>
+{% endblock %}
