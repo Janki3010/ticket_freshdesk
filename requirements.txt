@@ -1,0 +1,8 @@
+flask
+flask_restful
+flask_socketio
+gevent
+flask_cors
+requests
+flask_mysqldb
+flask_redis
