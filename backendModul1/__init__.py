@@ -16,12 +16,12 @@ CORS(app)
 app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'root'
 app.config['MYSQL_PASSWORD'] = 'root'
-app.config['MYSQL_DB'] = 'ecommerce'
+app.config['MYSQL_DB'] = 'ticket'
 
 app.config['REDIS_URL'] = "redis://localhost:6379/0"
 redis_client = FlaskRedis(app)
 
 mysql = MySQL(app)
-app.secret_key = 'your_secret_key'
+app.secret_key = '76426856534'
 
 importlib.import_module('backendModul1.pack1')

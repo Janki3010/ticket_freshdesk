@@ -13,7 +13,7 @@ domain = 'techtik'
 user_states = {}
 
 
-def create_ticket(subject, description, email):
+def create_ticket(subject, description, email, priority, status):
     url = f'https://{domain}.freshdesk.com/api/v2/tickets'
     headers = {
         'Content-Type': 'application/json'
@@ -22,8 +22,8 @@ def create_ticket(subject, description, email):
         'subject': subject,
         'description': description,
         'email': email,
-        'priority': 1,
-        'status': 2
+        'priority': int(priority),
+        'status': int(status)
     }
 
     response = requests.post(url, headers=headers, json=data, auth=HTTPBasicAuth(api_key, 'X'))
@@ -50,12 +50,7 @@ def view_ticket(ticket_id):
             "Status:": ticket_data.get('status'),
             "Priority:": ticket_data.get('priority')
         }
-        # print("Ticket Details:")
-        # print("Subject:", ticket_data.get('subject'))
-        # print("Description:", ticket_data.get('description'))
-        # print("Status:", ticket_data.get('status'))
-        # print("Priority:", ticket_data.get('priority'))
-        return json.dumps(data)
+
     else:
         print("Failed to retrieve ticket:", response.status_code, response.text)
 
@@ -95,49 +90,99 @@ class Login(Resource):
         else:
             return {'message': 'user not found'}, 404
 
-
+# current_param_index = 0  # Start with the first parameter
+# parameter_order = ["subject", "description", "email", "priority", "status"]
 class ChatBot(Namespace):
     def on_connect(self):
         print('Client Connected')
 
     def on_message(self, message):
+        cur = mysql.connection.cursor()
         user_id = int(redis_client.get('user_id'))
-        print(user_states)
+
         if user_id not in user_states:
-            user_states[user_id] = {'step': 0, 'subject': '', 'description': '', 'email': ''}
+            user_states[user_id] = {'step': 0, 'subject': '', 'description': '', 'email': '', 'priority': '', 'status': ''}
 
         state = user_states[user_id]
 
-        if state['step'] == 0:
-            if message in ['Hii', 'Hello']:
-                response = 'Hello! How can I help you? 1. Create A Ticket 2. View A Ticket'
-            elif message in ['View A Ticket', '2', 'view a ticket']:
+        try:
+            if state['step'] == 0:
+                if message.lower() == 'create ticket':
+                    cur.execute('SELECT * FROM process WHERE process_name = %s', (message,))
+                    process_name = cur.fetchone()
+                    if not process_name:
+                        response = "Process not found. Please try again."
+                        emit('response', response)
+                        return
+
+                    params = json.loads(process_name[2])['params']
+                    session['subject'] = params[0]
+                    session['description'] = params[1]
+                    session['email'] = params[2]
+                    session['priority'] = params[3]
+                    session['status'] = params[4]
+
+                    # Prompt for subject
+                    cur.execute('SELECT message FROM message WHERE message_name = %s', (session['subject'],))
+                    pmessage = cur.fetchone()
+                    prompt_message = json.loads(pmessage[0])['prompt']
+                    state['step'] = 1
+                    return emit('response', prompt_message)
+
+                else:
+                    response = "I didn't understand that. Please say 'Create A Ticket' to start."
+                    emit('response', response)
+
+            elif state['step'] == 1:
+                state['subject'] = message
+                # Prompt for description
+                cur.execute('SELECT message FROM message WHERE message_name = %s', (session['description'],))
+                pmessage = cur.fetchone()
+                prompt_message = json.loads(pmessage[0])['prompt']
+                state['step'] = 2
+                return emit('response', prompt_message)
+
+
+            elif state['step'] == 2:
+                state['description'] = message
+                cur.execute('SELECT message FROM message WHERE message_name = %s', (session['email'],))
+                pmessage = cur.fetchone()
+                prompt_message = json.loads(pmessage[0])['prompt']
+                state['step'] = 3
+                return emit('response', prompt_message)
+
+
+            elif state['step'] == 3:
+                state['email'] = message
+                cur.execute('SELECT message FROM message WHERE message_name = %s', (session['priority'],))
+                pmessage = cur.fetchone()
+                prompt_message = json.loads(pmessage[0])['prompt']
+                state['step'] = 4
+                return emit('response', prompt_message)
+
+            elif state['step'] == 4:
+                state['priority'] = message
+                cur.execute('SELECT message FROM message WHERE message_name = %s', (session['status'],))
+                pmessage = cur.fetchone()
+                prompt_message = json.loads(pmessage[0])['prompt']
+                state['step'] = 5
+                return emit('response', prompt_message)
+
+            elif state['step'] == 5:
+                state['status'] = message
+                ticket_response = create_ticket(state['subject'], state['description'], state['email'], state['priority'], state['status'])
+                user_states[user_id] = {'step': 0, 'subject': '', 'description': '', 'email': ''}
+                return emit('response', ticket_response)
+                # Reset state for next interaction
+
+
+            elif message.lower() in ['view a ticket', '2', 'view a ticket']:
                 ticket_id = int(redis_client.get('ticket_id'))
                 response = view_ticket(ticket_id)
+                emit('response', response)
 
-
-            elif message in ['Create A Ticket', '1', 'create a ticket']:
-                response = "Please provide the issue-related subject."
-                state['step'] = 1
-            else:
-                response = "I didn't understand that. Please say 'Create A Ticket' to start."
-
-        elif state['step'] == 1:
-            state['subject'] = message
-            response = "Please provide the description of the issue."
-            state['step'] = 2
-
-        elif state['step'] == 2:
-            state['description'] = message
-            response = "Please provide your email."
-            state['step'] = 3
-
-        elif state['step'] == 3:
-            state['email'] = message
-            ticket_response = create_ticket(state['subject'], state['description'], state['email'])
-            response = ticket_response
-            state['step'] = 0
-
-        emit('response', response)
-
-        user_states[user_id] = state
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            emit('response', "An error occurred while processing your request.")
+        finally:
+            cur.close()
