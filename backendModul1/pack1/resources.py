@@ -44,13 +44,13 @@ def view_ticket(ticket_id):
 
     if response.status_code == 200:
         ticket_data = response.json()
-        data = {
+        view_data = {
             "Subject": ticket_data.get('subject'),
             "Description:": ticket_data.get('description'),
             "Status:": ticket_data.get('status'),
             "Priority:": ticket_data.get('priority')
         }
-
+        return json.dumps(view_data)
     else:
         print("Failed to retrieve ticket:", response.status_code, response.text)
 
@@ -90,99 +90,70 @@ class Login(Resource):
         else:
             return {'message': 'user not found'}, 404
 
-# current_param_index = 0  # Start with the first parameter
-# parameter_order = ["subject", "description", "email", "priority", "status"]
+
+import json
+from flask_socketio import emit
+from flask_mysqldb import MySQL
+
 class ChatBot(Namespace):
     def on_connect(self):
         print('Client Connected')
+
+    def get_prompt(self, cur, key):
+        cur.execute('SELECT message FROM message WHERE message_name = %s', (key,))
+        pmessage = cur.fetchone()
+        return json.loads(pmessage[0])['prompt'] if pmessage else "No prompt found."
 
     def on_message(self, message):
         cur = mysql.connection.cursor()
         user_id = int(redis_client.get('user_id'))
 
         if user_id not in user_states:
-            user_states[user_id] = {'step': 0, 'subject': '', 'description': '', 'email': '', 'priority': '', 'status': ''}
+            user_states[user_id] = {'step': 0, 'data': {}}
 
         state = user_states[user_id]
 
-        try:
-            if state['step'] == 0:
-                if message.lower() == 'create ticket':
-                    cur.execute('SELECT * FROM process WHERE process_name = %s', (message,))
-                    process_name = cur.fetchone()
-                    if not process_name:
-                        response = "Process not found. Please try again."
-                        emit('response', response)
-                        return
+        if message in ['view a ticket', '2']:
+            ticket_id = int(redis_client.get('ticket_id'))
+            view_data = view_ticket(ticket_id)
+            emit('response', view_data)
+            return
 
-                    params = json.loads(process_name[2])['params']
-                    session['subject'] = params[0]
-                    session['description'] = params[1]
-                    session['email'] = params[2]
-                    session['priority'] = params[3]
-                    session['status'] = params[4]
+        if state['step'] == 0:
+            if message.lower() == 'create ticket':
+                cur.execute('SELECT * FROM process WHERE process_name = %s', (message,))
+                process = cur.fetchone()
+                if not process:
+                    emit('response', "Process not found. Please try again.")
+                    return
 
-                    # Prompt for subject
-                    cur.execute('SELECT message FROM message WHERE message_name = %s', (session['subject'],))
-                    pmessage = cur.fetchone()
-                    prompt_message = json.loads(pmessage[0])['prompt']
-                    state['step'] = 1
-                    return emit('response', prompt_message)
+                params = json.loads(process[2])['params']
+                state['data'] = {
+                    'subject': None,
+                    'description': None,
+                    'email': None,
+                    'priority': None,
+                    'status': None
+                }
 
-                else:
-                    response = "I didn't understand that. Please say 'Create A Ticket' to start."
-                    emit('response', response)
+                emit('response', self.get_prompt(cur, 'subject'))
+                state['step'] = 1
+                return
+            else:
+                emit('response', "Please say 'create ticket")
 
-            elif state['step'] == 1:
-                state['subject'] = message
-                # Prompt for description
-                cur.execute('SELECT message FROM message WHERE message_name = %s', (session['description'],))
-                pmessage = cur.fetchone()
-                prompt_message = json.loads(pmessage[0])['prompt']
-                state['step'] = 2
-                return emit('response', prompt_message)
-
-
-            elif state['step'] == 2:
-                state['description'] = message
-                cur.execute('SELECT message FROM message WHERE message_name = %s', (session['email'],))
-                pmessage = cur.fetchone()
-                prompt_message = json.loads(pmessage[0])['prompt']
-                state['step'] = 3
-                return emit('response', prompt_message)
+        elif 1 <= state['step'] < 5:
+            key = ['subject', 'description', 'email', 'priority', 'status']
+            state['data'][key[state['step'] - 1]] = message
+            if state['step'] < 5:
+                emit('response', self.get_prompt(cur, key[state['step']]))
+            else:
+                emit('response', "Please confirm your ticket details.")
+            state['step'] += 1
+        elif state['step'] == 5:
+            state['data']['status'] = message
+            ticket_response = create_ticket(**state['data'])
+            user_states[user_id] = {'step': 0, 'data': {}}
+            emit('response', ticket_response)
 
 
-            elif state['step'] == 3:
-                state['email'] = message
-                cur.execute('SELECT message FROM message WHERE message_name = %s', (session['priority'],))
-                pmessage = cur.fetchone()
-                prompt_message = json.loads(pmessage[0])['prompt']
-                state['step'] = 4
-                return emit('response', prompt_message)
-
-            elif state['step'] == 4:
-                state['priority'] = message
-                cur.execute('SELECT message FROM message WHERE message_name = %s', (session['status'],))
-                pmessage = cur.fetchone()
-                prompt_message = json.loads(pmessage[0])['prompt']
-                state['step'] = 5
-                return emit('response', prompt_message)
-
-            elif state['step'] == 5:
-                state['status'] = message
-                ticket_response = create_ticket(state['subject'], state['description'], state['email'], state['priority'], state['status'])
-                user_states[user_id] = {'step': 0, 'subject': '', 'description': '', 'email': ''}
-                return emit('response', ticket_response)
-                # Reset state for next interaction
-
-
-            elif message.lower() in ['view a ticket', '2', 'view a ticket']:
-                ticket_id = int(redis_client.get('ticket_id'))
-                response = view_ticket(ticket_id)
-                emit('response', response)
-
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            emit('response', "An error occurred while processing your request.")
-        finally:
-            cur.close()
