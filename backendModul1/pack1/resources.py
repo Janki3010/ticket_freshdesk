@@ -171,7 +171,8 @@ class ChatBot(Namespace):
         elif state['update_step'] == 1:
             try:
                 state['tid'] = int(message)
-                emit('response', 'Please enter the status (2 for open, 3 for Pending,4 for Resolved, 5 for Closed)')
+                # emit('response', 'Please enter the status (2 for open, 3 for Pending,4 for Resolved, 5 for Closed)')
+                emit('response',  self.get_prompt(cur, 'status'))
                 state['update_step'] = 2
                 return
             except ValueError:
@@ -180,7 +181,8 @@ class ChatBot(Namespace):
         elif state['update_step'] == 2:
             try:
                 state['status'] = int(message)
-                emit('response', 'Please enter the priority (1-5) Low-1,Medium-2,High-3,Urgent-4')
+                # emit('response', 'Please enter the priority (1-5) Low-1,Medium-2,High-3,Urgent-4')
+                emit('response', self.get_prompt(cur, 'priority'))
                 state['update_step'] = 3
                 return
             except ValueError:
